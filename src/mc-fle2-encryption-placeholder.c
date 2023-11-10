@@ -16,42 +16,42 @@
 
 #include <bson/bson.h>
 
-#include <limits.h> // SIZE_MAX
+#include <limits.h>  // SIZE_MAX
 
 #include "mc-fle2-encryption-placeholder-private.h"
 #include "mongocrypt-buffer-private.h"
 #include "mongocrypt.h"
 
 // Common logic for testing field name, tracking duplication, and presence.
-#define IF_FIELD(Name)                                                                                                 \
-    if (0 == strcmp(field, #Name)) {                                                                                   \
-        if (has_##Name) {                                                                                              \
-            CLIENT_ERR("Duplicate field '" #Name "' in placeholder bson");                                             \
-            goto fail;                                                                                                 \
-        }                                                                                                              \
+#define IF_FIELD(Name)                                                     \
+    if (0 == strcmp(field, #Name)) {                                       \
+        if (has_##Name) {                                                  \
+            CLIENT_ERR("Duplicate field '" #Name "' in placeholder bson"); \
+            goto fail;                                                     \
+        }                                                                  \
         has_##Name = true;
 
-#define END_IF_FIELD                                                                                                   \
-    continue;                                                                                                          \
+#define END_IF_FIELD \
+    continue;        \
     }
 
-#define CHECK_HAS(Name)                                                                                                \
-    if (!has_##Name) {                                                                                                 \
-        CLIENT_ERR("Missing field '" #Name "' in placeholder");                                                        \
-        goto fail;                                                                                                     \
+#define CHECK_HAS(Name)                                         \
+    if (!has_##Name) {                                          \
+        CLIENT_ERR("Missing field '" #Name "' in placeholder"); \
+        goto fail;                                              \
     }
 
-void mc_FLE2EncryptionPlaceholder_init(mc_FLE2EncryptionPlaceholder_t *placeholder) {
+void mc_FLE2EncryptionPlaceholder_init(mc_FLE2EncryptionPlaceholder_t* placeholder) {
     memset(placeholder, 0, sizeof(mc_FLE2EncryptionPlaceholder_t));
 }
 
-bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
-                                        const bson_t *in,
-                                        mongocrypt_status_t *status) {
+bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t* out,
+                                        const bson_t* in,
+                                        mongocrypt_status_t* status) {
     bson_iter_t iter;
     bool has_t = false, has_a = false, has_v = false, has_cm = false;
     bool has_ki = false, has_ku = false;
-    bool has_s = false;
+    bool has_s = false, has_tf = false;
 
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT_PARAM(in);
@@ -63,7 +63,7 @@ bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
     }
 
     while (bson_iter_next(&iter)) {
-        const char *field = bson_iter_key(&iter);
+        const char* field = bson_iter_key(&iter);
         BSON_ASSERT(field);
 
         IF_FIELD(t) {
@@ -73,7 +73,8 @@ bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
                 goto fail;
             }
             type = bson_iter_int32(&iter);
-            if ((type != MONGOCRYPT_FLE2_PLACEHOLDER_TYPE_INSERT) && (type != MONGOCRYPT_FLE2_PLACEHOLDER_TYPE_FIND)) {
+            if ((type != MONGOCRYPT_FLE2_PLACEHOLDER_TYPE_INSERT) &&
+                (type != MONGOCRYPT_FLE2_PLACEHOLDER_TYPE_FIND)) {
                 CLIENT_ERR("invalid placeholder type value: %d", type);
                 goto fail;
             }
@@ -88,8 +89,9 @@ bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
                 goto fail;
             }
             algorithm = bson_iter_int32(&iter);
-            if (algorithm != MONGOCRYPT_FLE2_ALGORITHM_UNINDEXED && algorithm != MONGOCRYPT_FLE2_ALGORITHM_EQUALITY
-                && algorithm != MONGOCRYPT_FLE2_ALGORITHM_RANGE) {
+            if (algorithm != MONGOCRYPT_FLE2_ALGORITHM_UNINDEXED &&
+                algorithm != MONGOCRYPT_FLE2_ALGORITHM_EQUALITY &&
+                algorithm != MONGOCRYPT_FLE2_ALGORITHM_RANGE) {
                 CLIENT_ERR("invalid algorithm value: %d", algorithm);
                 goto fail;
             }
@@ -141,6 +143,19 @@ bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
             }
         }
         END_IF_FIELD
+
+        IF_FIELD(tf) {
+            if (!BSON_ITER_HOLDS_INT64(&iter)) {
+                CLIENT_ERR("invalid marking, 'tf' must be an int64");
+                goto fail;
+            }
+            out->trimFactor = bson_iter_int64(&iter);
+            // TODO validate
+            // if (!mc_validate_sparsity(out->sparsity, status)) {
+            //     goto fail;
+            // }
+        }
+        END_IF_FIELD
     }
 
     CHECK_HAS(t)
@@ -160,7 +175,7 @@ fail:
     return false;
 }
 
-void mc_FLE2EncryptionPlaceholder_cleanup(mc_FLE2EncryptionPlaceholder_t *placeholder) {
+void mc_FLE2EncryptionPlaceholder_cleanup(mc_FLE2EncryptionPlaceholder_t* placeholder) {
     BSON_ASSERT_PARAM(placeholder);
 
     _mongocrypt_buffer_cleanup(&placeholder->index_key_id);
@@ -168,7 +183,7 @@ void mc_FLE2EncryptionPlaceholder_cleanup(mc_FLE2EncryptionPlaceholder_t *placeh
     mc_FLE2EncryptionPlaceholder_init(placeholder);
 }
 
-bool mc_validate_contention(int64_t contention, mongocrypt_status_t *status) {
+bool mc_validate_contention(int64_t contention, mongocrypt_status_t* status) {
     if (contention < 0) {
         CLIENT_ERR("contention must be non-negative, got: %" PRId64, contention);
         return false;
@@ -180,7 +195,7 @@ bool mc_validate_contention(int64_t contention, mongocrypt_status_t *status) {
     return true;
 }
 
-bool mc_validate_sparsity(int64_t sparsity, mongocrypt_status_t *status) {
+bool mc_validate_sparsity(int64_t sparsity, mongocrypt_status_t* status) {
     if (sparsity < 0) {
         CLIENT_ERR("sparsity must be non-negative, got: %" PRId64, sparsity);
         return false;
@@ -193,12 +208,12 @@ bool mc_validate_sparsity(int64_t sparsity, mongocrypt_status_t *status) {
     return true;
 }
 
-static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t *out,
-                                                const bson_iter_t *in,
-                                                mongocrypt_status_t *status) {
+static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t* out,
+                                                const bson_iter_t* in,
+                                                mongocrypt_status_t* status) {
     bson_iter_t iter;
-    bool has_lowerBound = false, has_lbIncluded = false, has_upperBound = false, has_ubIncluded = false,
-         has_indexMin = false, has_indexMax = false, has_precision = false;
+    bool has_lowerBound = false, has_lbIncluded = false, has_upperBound = false,
+         has_ubIncluded = false, has_indexMin = false, has_indexMax = false, has_precision = false;
 
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT_PARAM(in);
@@ -206,14 +221,15 @@ static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t 
     iter = *in;
 
     if (!BSON_ITER_HOLDS_DOCUMENT(&iter)) {
-        CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: must be an iterator to "
-                   "a document");
+        CLIENT_ERR(
+            "invalid FLE2RangeFindSpecEdgesInfo: must be an iterator to "
+            "a document");
         return false;
     }
     bson_iter_recurse(&iter, &iter);
 
     while (bson_iter_next(&iter)) {
-        const char *field = bson_iter_key(&iter);
+        const char* field = bson_iter_key(&iter);
         BSON_ASSERT(field);
 
         IF_FIELD(lowerBound) {
@@ -223,8 +239,9 @@ static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t 
 
         IF_FIELD(lbIncluded) {
             if (!BSON_ITER_HOLDS_BOOL(&iter)) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'lbIncluded' must "
-                           "be a bool");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'lbIncluded' must "
+                    "be a bool");
                 goto fail;
             }
             out->lbIncluded = bson_iter_bool(&iter);
@@ -238,8 +255,9 @@ static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t 
 
         IF_FIELD(ubIncluded) {
             if (!BSON_ITER_HOLDS_BOOL(&iter)) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'ubIncluded' must "
-                           "be a bool");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'ubIncluded' must "
+                    "be a bool");
                 goto fail;
             }
             out->ubIncluded = bson_iter_bool(&iter);
@@ -258,14 +276,16 @@ static bool mc_FLE2RangeFindSpecEdgesInfo_parse(mc_FLE2RangeFindSpecEdgesInfo_t 
 
         IF_FIELD(precision) {
             if (!BSON_ITER_HOLDS_INT32(&iter)) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'precision' must "
-                           "be an int32");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'precision' must "
+                    "be an int32");
                 goto fail;
             }
             int32_t val = bson_iter_int32(&iter);
             if (val < 0) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'precision' must be"
-                           "non-negative");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'precision' must be"
+                    "non-negative");
                 goto fail;
             }
 
@@ -288,12 +308,15 @@ fail:
     return false;
 }
 
-bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t *out, const bson_iter_t *in, mongocrypt_status_t *status) {
+bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t* out,
+                                const bson_iter_t* in,
+                                mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT_PARAM(in);
 
     bson_iter_t iter = *in;
-    bool has_edgesInfo = false, has_payloadId = false, has_firstOperator = false, has_secondOperator = false;
+    bool has_edgesInfo = false, has_payloadId = false, has_firstOperator = false,
+         has_secondOperator = false;
 
     *out = (mc_FLE2RangeFindSpec_t){{{{0}}}};
 
@@ -304,7 +327,7 @@ bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t *out, const bson_iter_t *
     bson_iter_recurse(&iter, &iter);
 
     while (bson_iter_next(&iter)) {
-        const char *field = bson_iter_key(&iter);
+        const char* field = bson_iter_key(&iter);
         BSON_ASSERT(field);
 
         IF_FIELD(edgesInfo) {
@@ -331,10 +354,11 @@ bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t *out, const bson_iter_t *
             }
             const int32_t first_op = bson_iter_int32(&iter);
             if (first_op < FLE2RangeOperator_min_val || first_op > FLE2RangeOperator_max_val) {
-                CLIENT_ERR("invalid FLE2RangeFindSpec: 'firstOperator' must be "
-                           "between %d and %d",
-                           FLE2RangeOperator_min_val,
-                           FLE2RangeOperator_max_val);
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpec: 'firstOperator' must be "
+                    "between %d and %d",
+                    FLE2RangeOperator_min_val,
+                    FLE2RangeOperator_max_val);
                 goto fail;
             }
             out->firstOperator = (mc_FLE2RangeOperator_t)first_op;
@@ -348,10 +372,11 @@ bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t *out, const bson_iter_t *
             }
             const int32_t second_op = bson_iter_int32(&iter);
             if (second_op < FLE2RangeOperator_min_val || second_op > FLE2RangeOperator_max_val) {
-                CLIENT_ERR("invalid FLE2RangeFindSpec: 'secondOperator' must be "
-                           "between %d and %d",
-                           FLE2RangeOperator_min_val,
-                           FLE2RangeOperator_max_val);
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpec: 'secondOperator' must be "
+                    "between %d and %d",
+                    FLE2RangeOperator_min_val,
+                    FLE2RangeOperator_max_val);
                 goto fail;
             }
             out->secondOperator = (mc_FLE2RangeOperator_t)second_op;
@@ -369,7 +394,9 @@ fail:
     return false;
 }
 
-bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t *out, const bson_iter_t *in, mongocrypt_status_t *status) {
+bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t* out,
+                                  const bson_iter_t* in,
+                                  mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT_PARAM(in);
 
@@ -385,7 +412,7 @@ bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t *out, const bson_iter
     bson_iter_recurse(&iter, &iter);
 
     while (bson_iter_next(&iter)) {
-        const char *field = bson_iter_key(&iter);
+        const char* field = bson_iter_key(&iter);
         BSON_ASSERT(field);
 
         IF_FIELD(v) {
@@ -405,14 +432,16 @@ bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t *out, const bson_iter
 
         IF_FIELD(precision) {
             if (!BSON_ITER_HOLDS_INT32(&iter)) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'precision' must "
-                           "be an int32");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'precision' must "
+                    "be an int32");
                 goto fail;
             }
             int32_t val = bson_iter_int32(&iter);
             if (val < 0) {
-                CLIENT_ERR("invalid FLE2RangeFindSpecEdgesInfo: 'precision' must be"
-                           "non-negative");
+                CLIENT_ERR(
+                    "invalid FLE2RangeFindSpecEdgesInfo: 'precision' must be"
+                    "non-negative");
                 goto fail;
             }
             out->precision = OPT_U32((uint32_t)val);

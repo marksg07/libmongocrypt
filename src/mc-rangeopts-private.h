@@ -23,7 +23,7 @@
 #include "mongocrypt-status-private.h"
 
 typedef struct {
-    bson_t *bson;
+    bson_t* bson;
 
     struct {
         bson_iter_t value;
@@ -36,6 +36,7 @@ typedef struct {
     } max;
 
     int64_t sparsity;
+    int64_t trimFactor;
     mc_optional_uint32_t precision;
 } mc_RangeOpts_t;
 
@@ -45,10 +46,11 @@ typedef struct {
  *    "min": BSON value,
  *    "max": BSON value,
  *    "sparsity": Int64,
+ *    "trimFactor": Int64,
  *    "precision": Optional<Int32>
  * }
  */
-bool mc_RangeOpts_parse(mc_RangeOpts_t *ro, const bson_t *in, mongocrypt_status_t *status);
+bool mc_RangeOpts_parse(mc_RangeOpts_t* ro, const bson_t* in, mongocrypt_status_t* status);
 
 /*
  * mc_RangeOpts_to_FLE2RangeInsertSpec creates a placeholder value to be
@@ -66,29 +68,29 @@ bool mc_RangeOpts_parse(mc_RangeOpts_t *ro, const bson_t *in, mongocrypt_status_
  *
  * Preconditions: out must be initialized by caller.
  */
-bool mc_RangeOpts_to_FLE2RangeInsertSpec(const mc_RangeOpts_t *ro,
-                                         const bson_t *v,
-                                         bson_t *out,
-                                         mongocrypt_status_t *status);
+bool mc_RangeOpts_to_FLE2RangeInsertSpec(const mc_RangeOpts_t* ro,
+                                         const bson_t* v,
+                                         bson_t* out,
+                                         mongocrypt_status_t* status);
 
 /* mc_RangeOpts_appendMin appends the minimum value of the range for a given
  * type. If `ro->min` is unset, uses the lowest representable value of the value
  * type. Errors if `valueType` does not match the type of `ro->min`. */
-bool mc_RangeOpts_appendMin(const mc_RangeOpts_t *ro,
+bool mc_RangeOpts_appendMin(const mc_RangeOpts_t* ro,
                             bson_type_t valueType,
-                            const char *fieldName,
-                            bson_t *out,
-                            mongocrypt_status_t *status);
+                            const char* fieldName,
+                            bson_t* out,
+                            mongocrypt_status_t* status);
 
 /* mc_RangeOpts_appendMax appends the maximum value of the range for a given
  * type. If `ro->max` is unset, uses the highest representable value of the
  * value type. Errors if `valueType` does not match the type of `ro->max`. */
-bool mc_RangeOpts_appendMax(const mc_RangeOpts_t *ro,
+bool mc_RangeOpts_appendMax(const mc_RangeOpts_t* ro,
                             bson_type_t valueType,
-                            const char *fieldName,
-                            bson_t *out,
-                            mongocrypt_status_t *status);
+                            const char* fieldName,
+                            bson_t* out,
+                            mongocrypt_status_t* status);
 
-void mc_RangeOpts_cleanup(mc_RangeOpts_t *ro);
+void mc_RangeOpts_cleanup(mc_RangeOpts_t* ro);
 
-#endif // MC_RANGEOPTS_PRIVATE_H
+#endif  // MC_RANGEOPTS_PRIVATE_H

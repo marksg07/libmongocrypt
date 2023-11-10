@@ -74,7 +74,9 @@ typedef struct {
     mc_FLE2RangeOperator_t secondOperator;
 } mc_FLE2RangeFindSpec_t;
 
-bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t *out, const bson_iter_t *in, mongocrypt_status_t *status);
+bool mc_FLE2RangeFindSpec_parse(mc_FLE2RangeFindSpec_t* out,
+                                const bson_iter_t* in,
+                                mongocrypt_status_t* status);
 
 /** mc_FLE2RangeInsertSpec_t represents the range insert specification that is
  * encoded inside of a FLE2EncryptionPlaceholder. See
@@ -92,7 +94,9 @@ typedef struct {
     mc_optional_uint32_t precision;
 } mc_FLE2RangeInsertSpec_t;
 
-bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t *out, const bson_iter_t *in, mongocrypt_status_t *status);
+bool mc_FLE2RangeInsertSpec_parse(mc_FLE2RangeInsertSpec_t* out,
+                                  const bson_iter_t* in,
+                                  mongocrypt_status_t* status);
 
 /** FLE2EncryptionPlaceholder implements Encryption BinData (subtype 6)
  * sub-subtype 0, the intent-to-encrypt mapping. Contains a value to encrypt and
@@ -119,23 +123,24 @@ typedef struct {
     int64_t maxContentionCounter;
     // sparsity is the Queryable Encryption range hypergraph sparsity factor
     int64_t sparsity;
+    int64_t trimFactor;
 } mc_FLE2EncryptionPlaceholder_t;
 
-void mc_FLE2EncryptionPlaceholder_init(mc_FLE2EncryptionPlaceholder_t *placeholder);
+void mc_FLE2EncryptionPlaceholder_init(mc_FLE2EncryptionPlaceholder_t* placeholder);
 
-bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t *out,
-                                        const bson_t *in,
-                                        mongocrypt_status_t *status);
+bool mc_FLE2EncryptionPlaceholder_parse(mc_FLE2EncryptionPlaceholder_t* out,
+                                        const bson_t* in,
+                                        mongocrypt_status_t* status);
 
-void mc_FLE2EncryptionPlaceholder_cleanup(mc_FLE2EncryptionPlaceholder_t *placeholder);
+void mc_FLE2EncryptionPlaceholder_cleanup(mc_FLE2EncryptionPlaceholder_t* placeholder);
 
 /* mc_validate_contention is used to check that contention is a valid
  * value. contention may come from the 'cm' field in FLE2EncryptionPlaceholder
  * or from mongocrypt_ctx_setopt_contention_factor. */
-bool mc_validate_contention(int64_t contention, mongocrypt_status_t *status);
+bool mc_validate_contention(int64_t contention, mongocrypt_status_t* status);
 
 /* mc_validate_sparsity is used to check that sparsity is a valid
  * value. */
-bool mc_validate_sparsity(int64_t sparsity, mongocrypt_status_t *status);
+bool mc_validate_sparsity(int64_t sparsity, mongocrypt_status_t* status);
 
 #endif /* MC_FLE2_ENCRYPTION_PLACEHOLDER_PRIVATE_H */
