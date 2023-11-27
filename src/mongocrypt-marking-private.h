@@ -45,24 +45,26 @@ typedef struct {
     };
 } _mongocrypt_marking_t;
 
-void _mongocrypt_marking_init(_mongocrypt_marking_t *marking);
+void _mongocrypt_marking_init(_mongocrypt_marking_t* marking);
 
-void _mongocrypt_marking_cleanup(_mongocrypt_marking_t *marking);
+void _mongocrypt_marking_cleanup(_mongocrypt_marking_t* marking);
 
-bool _mongocrypt_marking_parse_unowned(const _mongocrypt_buffer_t *in,
-                                       _mongocrypt_marking_t *out,
-                                       mongocrypt_status_t *status) MONGOCRYPT_WARN_UNUSED_RESULT;
+bool _mongocrypt_marking_parse_unowned(const _mongocrypt_buffer_t* in,
+                                       _mongocrypt_marking_t* out,
+                                       mongocrypt_status_t* status) MONGOCRYPT_WARN_UNUSED_RESULT;
 
 // Callers are expected to initialize `ciphertext` with
 // `_mongocrypt_ciphertext_init before calling,
 // and eventually free it using `_mongocrypt_ciphertext_cleanup`.
-bool _mongocrypt_marking_to_ciphertext(void *ctx,
-                                       _mongocrypt_marking_t *marking,
-                                       _mongocrypt_ciphertext_t *ciphertext,
-                                       mongocrypt_status_t *status) MONGOCRYPT_WARN_UNUSED_RESULT;
+bool _mongocrypt_marking_to_ciphertext(void* ctx,
+                                       _mongocrypt_marking_t* marking,
+                                       _mongocrypt_ciphertext_t* ciphertext,
+                                       mongocrypt_status_t* status) MONGOCRYPT_WARN_UNUSED_RESULT;
 
-mc_mincover_t *mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t *findSpec,
+mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* findSpec,
                                                       size_t sparsity,
-                                                      mongocrypt_status_t *status) MONGOCRYPT_WARN_UNUSED_RESULT;
+                                                      size_t trimFactor,
+                                                      mongocrypt_status_t* status)
+    MONGOCRYPT_WARN_UNUSED_RESULT;
 
 #endif /* MONGOCRYPT_MARKING_PRIVATE_H */

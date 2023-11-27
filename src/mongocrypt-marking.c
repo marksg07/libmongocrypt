@@ -1362,6 +1362,7 @@ static bool isInfinite(bson_iter_t* iter) {
 // FLE2RangeFindSpec. Returns NULL on error.
 mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* findSpec,
                                                       size_t sparsity,
+                                                      size_t trimFactor,
                                                       mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(findSpec);
     BSON_ASSERT(findSpec->edgesInfo.set);
@@ -1423,7 +1424,8 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
                     .includeUpperBound = includeUpperBound,
                     .min = OPT_I32(bson_iter_int32(&findSpec->edgesInfo.value.indexMin)),
                     .max = OPT_I32(bson_iter_int32(&findSpec->edgesInfo.value.indexMax)),
-                    .sparsity = sparsity},
+                    .sparsity = sparsity,
+                    .trimFactor = trimFactor},
                 status);
 
         case BSON_TYPE_INT64:
@@ -1439,7 +1441,8 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
                     .includeUpperBound = includeUpperBound,
                     .min = OPT_I64(bson_iter_int64(&findSpec->edgesInfo.value.indexMin)),
                     .max = OPT_I64(bson_iter_int64(&findSpec->edgesInfo.value.indexMax)),
-                    .sparsity = sparsity},
+                    .sparsity = sparsity,
+                    .trimFactor = trimFactor},
                 status);
         case BSON_TYPE_DATE_TIME:
             BSON_ASSERT(bson_iter_type(&lowerBound) == BSON_TYPE_DATE_TIME);
@@ -1454,7 +1457,8 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
                     .includeUpperBound = includeUpperBound,
                     .min = OPT_I64(bson_iter_date_time(&findSpec->edgesInfo.value.indexMin)),
                     .max = OPT_I64(bson_iter_date_time(&findSpec->edgesInfo.value.indexMax)),
-                    .sparsity = sparsity},
+                    .sparsity = sparsity,
+                    .trimFactor = trimFactor},
                 status);
         case BSON_TYPE_DOUBLE: {
             BSON_ASSERT(bson_iter_type(&lowerBound) == BSON_TYPE_DOUBLE);
@@ -1466,7 +1470,8 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
                                                 .includeLowerBound = includeLowerBound,
                                                 .upperBound = bson_iter_double(&upperBound),
                                                 .includeUpperBound = includeUpperBound,
-                                                .sparsity = sparsity};
+                                                .sparsity = sparsity,
+                                                .trimFactor = trimFactor};
             if (findSpec->edgesInfo.value.precision.set) {
                 // If precision is set, pass min/max/precision to mc_getMincoverDouble.
                 // Do not pass min/max if precision is not set. All three must be set
@@ -1492,7 +1497,7 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
                 .upperBound = mc_dec128_from_bson_iter(&upperBound),
                 .includeUpperBound = includeUpperBound,
                 .sparsity = sparsity,
-            };
+                .trimFactor = trimFactor};
             if (findSpec->edgesInfo.value.precision.set) {
                 args.min =
                     OPT_MC_DEC128(mc_dec128_from_bson_iter(&findSpec->edgesInfo.value.indexMin));
@@ -1594,7 +1599,7 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange_v1(
             BSON_ASSERT(placeholder->sparsity >= 0 &&
                         (uint64_t)placeholder->sparsity <= (uint64_t)SIZE_MAX);
             mincover = mc_get_mincover_from_FLE2RangeFindSpec(
-                &findSpec, (size_t)placeholder->sparsity, status);
+                &findSpec, (size_t)placeholder->sparsity, (size_t)placeholder->trimFactor, status);
             if (!mincover) {
                 goto fail;
             }
@@ -1718,7 +1723,7 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange(
             BSON_ASSERT(placeholder->sparsity >= 0 &&
                         (uint64_t)placeholder->sparsity <= (uint64_t)SIZE_MAX);
             mincover = mc_get_mincover_from_FLE2RangeFindSpec(
-                &findSpec, (size_t)placeholder->sparsity, status);
+                &findSpec, (size_t)placeholder->sparsity, (size_t)placeholder->trimFactor, status);
             if (!mincover) {
                 goto fail;
             }

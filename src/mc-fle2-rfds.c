@@ -17,13 +17,13 @@
 #include "mc-fle2-rfds-private.h"
 
 #include "mc-check-conversions-private.h"
-#include "mc-fle-blob-subtype-private.h" // MC_SUBTYPE_FLE2EncryptionPlaceholder
-#include "mongocrypt-private.h"          // CLIENT_ERR
+#include "mc-fle-blob-subtype-private.h"  // MC_SUBTYPE_FLE2EncryptionPlaceholder
+#include "mongocrypt-private.h"           // CLIENT_ERR
 
-#include "mlib/thread.h" // mlib_once_flag
-#include <math.h>        // INFINITY
+#include "mlib/thread.h"  // mlib_once_flag
+#include <math.h>         // INFINITY
 
-static mc_FLE2RangeOperator_t get_operator_type(const char *key) {
+static mc_FLE2RangeOperator_t get_operator_type(const char* key) {
     BSON_ASSERT_PARAM(key);
 
     if (0 == strcmp(key, "$gt")) {
@@ -39,39 +39,46 @@ static mc_FLE2RangeOperator_t get_operator_type(const char *key) {
     }
 }
 
-static const char *mc_FLE2RangeOperator_to_string(mc_FLE2RangeOperator_t op) {
+static const char* mc_FLE2RangeOperator_to_string(mc_FLE2RangeOperator_t op) {
     switch (op) {
-    case FLE2RangeOperator_kGt: return "$gt";
-    case FLE2RangeOperator_kGte: return "$gte";
-    case FLE2RangeOperator_kLt: return "$lt";
-    case FLE2RangeOperator_kLte: return "$lte";
-    case FLE2RangeOperator_kNone: return "none";
-    default: return "Unknown";
+        case FLE2RangeOperator_kGt:
+            return "$gt";
+        case FLE2RangeOperator_kGte:
+            return "$gte";
+        case FLE2RangeOperator_kLt:
+            return "$lt";
+        case FLE2RangeOperator_kLte:
+            return "$lte";
+        case FLE2RangeOperator_kNone:
+            return "none";
+        default:
+            return "Unknown";
     }
 }
 
-static bool is_supported_operator(const char *key) {
+static bool is_supported_operator(const char* key) {
     BSON_ASSERT_PARAM(key);
     return get_operator_type(key) != FLE2RangeOperator_kNone;
 }
 
 // Suffix an error message with the JSON string form of bson.
-#define ERR_WITH_BSON(bson, fmt, ...)                                                                                  \
-    if (1) {                                                                                                           \
-        char *_str = bson_as_canonical_extended_json((bson), NULL);                                                    \
-        CLIENT_ERR(fmt ": %s", __VA_ARGS__, _str);                                                                     \
-        bson_free(_str);                                                                                               \
-    } else                                                                                                             \
+#define ERR_WITH_BSON(bson, fmt, ...)                               \
+    if (1) {                                                        \
+        char* _str = bson_as_canonical_extended_json((bson), NULL); \
+        CLIENT_ERR(fmt ": %s", __VA_ARGS__, _str);                  \
+        bson_free(_str);                                            \
+    } else                                                          \
         (void)0
 
 // Parses a document like {$and: []} and outputs an iterator to the array.
-static bool parse_and(const bson_t *in, bson_iter_t *out, mongocrypt_status_t *status) {
+static bool parse_and(const bson_t* in, bson_iter_t* out, mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(in);
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT(status || true);
 
     bson_iter_t and;
-    if (!bson_iter_init(&and, in) || !bson_iter_next(&and) || 0 != strcmp(bson_iter_key(&and), "$and")) {
+    if (!bson_iter_init(&and, in) || !bson_iter_next(&and) ||
+        0 != strcmp(bson_iter_key(&and), "$and")) {
         ERR_WITH_BSON(in, "%s", "error unable to find '$and'");
         return false;
     }
@@ -91,24 +98,26 @@ static bool parse_and(const bson_t *in, bson_iter_t *out, mongocrypt_status_t *s
 }
 
 typedef struct {
-    const char *op_type_str;
-    const char *field;
+    const char* op_type_str;
+    const char* field;
     bson_iter_t value;
     mc_FLE2RangeOperator_t op_type;
 } operator_value_t;
 
 // Parses a document like {$gt: ["$age", 5]}.
-static bool
-parse_aggregate_expression(const bson_t *orig, bson_iter_t *in, operator_value_t *out, mongocrypt_status_t *status) {
+static bool parse_aggregate_expression(const bson_t* orig,
+                                       bson_iter_t* in,
+                                       operator_value_t* out,
+                                       mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(orig);
     BSON_ASSERT_PARAM(in);
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT(status || true);
 
     bson_iter_t array, value;
-    const char *op_type_str = bson_iter_key(in);
+    const char* op_type_str = bson_iter_key(in);
     bool ok = false;
-    const char *field;
+    const char* field;
 
     if (!BSON_ITER_HOLDS_ARRAY(in)) {
         ERR_WITH_BSON(orig, "%s", "expected argument to be array");
@@ -155,17 +164,19 @@ fail:
 }
 
 // Parses a document like {age: {$gt: 5}}.
-static bool
-parse_match_expression(const bson_t *orig, bson_iter_t *in, operator_value_t *out, mongocrypt_status_t *status) {
+static bool parse_match_expression(const bson_t* orig,
+                                   bson_iter_t* in,
+                                   operator_value_t* out,
+                                   mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(orig);
     BSON_ASSERT_PARAM(in);
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT(status || true);
 
     bson_iter_t document, value;
-    const char *op_type_str;
+    const char* op_type_str;
     bool ok = false;
-    const char *field = bson_iter_key(in);
+    const char* field = bson_iter_key(in);
 
     if (!BSON_ITER_HOLDS_DOCUMENT(in)) {
         ERR_WITH_BSON(orig, "%s", "expected argument to be document");
@@ -206,9 +217,9 @@ fail:
     return ok;
 }
 
-bool mc_FLE2RangeFindDriverSpec_parse(mc_FLE2RangeFindDriverSpec_t *spec,
-                                      const bson_t *in,
-                                      mongocrypt_status_t *status) {
+bool mc_FLE2RangeFindDriverSpec_parse(mc_FLE2RangeFindDriverSpec_t* spec,
+                                      const bson_t* in,
+                                      mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(in);
     BSON_ASSERT(status || true);
 
@@ -266,46 +277,48 @@ bool mc_FLE2RangeFindDriverSpec_parse(mc_FLE2RangeFindDriverSpec_t *spec,
 
         operator_value_t op;
         switch (arg_type) {
-        case AGGREGATE_EXPRESSION:
-            if (!parse_aggregate_expression(in, &doc, &op, status)) {
+            case AGGREGATE_EXPRESSION:
+                if (!parse_aggregate_expression(in, &doc, &op, status)) {
+                    goto fail;
+                }
+                break;
+            case MATCH_EXPRESSION:
+                if (!parse_match_expression(in, &doc, &op, status)) {
+                    goto fail;
+                }
+                break;
+            case UNKNOWN:
+            default:
+                ERR_WITH_BSON(in, "%s", "unexpected unknown expression type");
                 goto fail;
-            }
-            break;
-        case MATCH_EXPRESSION:
-            if (!parse_match_expression(in, &doc, &op, status)) {
-                goto fail;
-            }
-            break;
-        case UNKNOWN:
-        default: ERR_WITH_BSON(in, "%s", "unexpected unknown expression type"); goto fail;
         }
 
         switch (op.op_type) {
-        case FLE2RangeOperator_kGt:
-        case FLE2RangeOperator_kGte:
-            if (spec->lower.set) {
-                ERR_WITH_BSON(in, "unexpected duplicate bound %s", op.op_type_str);
+            case FLE2RangeOperator_kGt:
+            case FLE2RangeOperator_kGte:
+                if (spec->lower.set) {
+                    ERR_WITH_BSON(in, "unexpected duplicate bound %s", op.op_type_str);
+                    goto fail;
+                }
+                spec->lower.set = true;
+                spec->lower.value = op.value;
+                spec->lower.included = op.op_type == FLE2RangeOperator_kGte;
+                break;
+            case FLE2RangeOperator_kLt:
+            case FLE2RangeOperator_kLte:
+                if (spec->upper.set) {
+                    ERR_WITH_BSON(in, "unexpected duplicate bound %s", op.op_type_str);
+                    goto fail;
+                }
+                spec->upper.set = true;
+                spec->upper.value = op.value;
+                spec->upper.included = op.op_type == FLE2RangeOperator_kLte;
+                break;
+            case FLE2RangeOperator_kNone:
+            default:
+                ERR_WITH_BSON(in, "unsupported operator type %s", op.op_type_str);
                 goto fail;
-            }
-            spec->lower.set = true;
-            spec->lower.value = op.value;
-            spec->lower.included = op.op_type == FLE2RangeOperator_kGte;
-            break;
-        case FLE2RangeOperator_kLt:
-        case FLE2RangeOperator_kLte:
-            if (spec->upper.set) {
-                ERR_WITH_BSON(in, "unexpected duplicate bound %s", op.op_type_str);
-                goto fail;
-            }
-            spec->upper.set = true;
-            spec->upper.value = op.value;
-            spec->upper.included = op.op_type == FLE2RangeOperator_kLte;
-            break;
-        case FLE2RangeOperator_kNone:
-        default:
-            ERR_WITH_BSON(in, "unsupported operator type %s", op.op_type_str);
-            goto fail;
-            break;
+                break;
         }
 
         if (spec->field && 0 != strcmp(spec->field, op.field)) {
@@ -320,9 +333,15 @@ bool mc_FLE2RangeFindDriverSpec_parse(mc_FLE2RangeFindDriverSpec_t *spec,
         spec->nOps++;
 
         switch (spec->nOps) {
-        case 1: spec->firstOp = op.op_type; break;
-        case 2: spec->secondOp = op.op_type; break;
-        default: ERR_WITH_BSON(in, "expected 1 or 2 operators, got > 2: %s", op.op_type_str); goto fail;
+            case 1:
+                spec->firstOp = op.op_type;
+                break;
+            case 2:
+                spec->secondOp = op.op_type;
+                break;
+            default:
+                ERR_WITH_BSON(in, "expected 1 or 2 operators, got > 2: %s", op.op_type_str);
+                goto fail;
         }
 
         spec->field = op.field;
@@ -335,23 +354,23 @@ fail:
 
 // mc_makeRangeFindPlaceholder creates a placeholder to be consumed by
 // libmongocrypt for encryption.
-bool mc_makeRangeFindPlaceholder(mc_makeRangeFindPlaceholder_args_t *args,
-                                 _mongocrypt_buffer_t *out,
-                                 mongocrypt_status_t *status) {
+bool mc_makeRangeFindPlaceholder(mc_makeRangeFindPlaceholder_args_t* args,
+                                 _mongocrypt_buffer_t* out,
+                                 mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(args);
     BSON_ASSERT_PARAM(out);
     BSON_ASSERT(status || true);
 
     bool ok = false;
-    bson_t *edgesInfo = bson_new();
-    bson_t *v = bson_new();
-    bson_t *p = bson_new();
+    bson_t* edgesInfo = bson_new();
+    bson_t* v = bson_new();
+    bson_t* p = bson_new();
     _mongocrypt_buffer_init(out);
 
-#define TRY(stmt)                                                                                                      \
-    if (!(stmt)) {                                                                                                     \
-        CLIENT_ERR("error appending BSON for placeholder");                                                            \
-        goto fail;                                                                                                     \
+#define TRY(stmt)                                           \
+    if (!(stmt)) {                                          \
+        CLIENT_ERR("error appending BSON for placeholder"); \
+        goto fail;                                          \
     }
 
     // create edgesInfo.
@@ -385,6 +404,7 @@ bool mc_makeRangeFindPlaceholder(mc_makeRangeFindPlaceholder_args_t *args,
     TRY(BSON_APPEND_DOCUMENT(p, "v", v));
     TRY(BSON_APPEND_INT64(p, "cm", args->maxContentionCounter));
     TRY(BSON_APPEND_INT64(p, "s", args->sparsity));
+    TRY(BSON_APPEND_INT64(p, "tf", args->trimFactor));
 #undef TRY
 
     BSON_ASSERT(p->len < UINT32_MAX);
@@ -401,14 +421,14 @@ fail:
     return ok;
 }
 
-bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *spec,
-                                                const mc_RangeOpts_t *range_opts,
+bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t* spec,
+                                                const mc_RangeOpts_t* range_opts,
                                                 int64_t maxContentionCounter,
-                                                const _mongocrypt_buffer_t *user_key_id,
-                                                const _mongocrypt_buffer_t *index_key_id,
+                                                const _mongocrypt_buffer_t* user_key_id,
+                                                const _mongocrypt_buffer_t* index_key_id,
                                                 int32_t payloadId,
-                                                bson_t *out,
-                                                mongocrypt_status_t *status) {
+                                                bson_t* out,
+                                                mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(spec);
     BSON_ASSERT_PARAM(range_opts);
     BSON_ASSERT_PARAM(user_key_id);
@@ -425,10 +445,10 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
 
     BCON_APPEND(&infDoc, "p", BCON_DOUBLE(INFINITY), "n", BCON_DOUBLE(-INFINITY));
 
-#define TRY(stmt)                                                                                                      \
-    if (!(stmt)) {                                                                                                     \
-        CLIENT_ERR("error transforming BSON for FLE2RangeFindDriverSpec: %s", #stmt);                                  \
-        goto fail;                                                                                                     \
+#define TRY(stmt)                                                                     \
+    if (!(stmt)) {                                                                    \
+        CLIENT_ERR("error transforming BSON for FLE2RangeFindDriverSpec: %s", #stmt); \
+        goto fail;                                                                    \
     }
 
     TRY(bson_iter_init_find(&posInf, &infDoc, "p"));
@@ -456,21 +476,23 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
         TRY(bson_iter_init_find(&indexMax, &minMaxDoc, "indexMax"));
     }
 
-    mc_makeRangeFindPlaceholder_args_t args = {.isStub = false,
-                                               .user_key_id = user_key_id,
-                                               .index_key_id = index_key_id,
-                                               .lowerBound = spec->lower.set ? spec->lower.value : negInf,
-                                               .lbIncluded = spec->lower.set ? spec->lower.included : true,
-                                               .upperBound = spec->upper.set ? spec->upper.value : posInf,
-                                               .ubIncluded = spec->upper.set ? spec->upper.included : true,
-                                               .payloadId = payloadId,
-                                               .firstOp = spec->firstOp,
-                                               .secondOp = spec->secondOp,
-                                               .indexMin = indexMin,
-                                               .indexMax = indexMax,
-                                               .precision = range_opts->precision,
-                                               .maxContentionCounter = maxContentionCounter,
-                                               .sparsity = range_opts->sparsity};
+    mc_makeRangeFindPlaceholder_args_t args = {
+        .isStub = false,
+        .user_key_id = user_key_id,
+        .index_key_id = index_key_id,
+        .lowerBound = spec->lower.set ? spec->lower.value : negInf,
+        .lbIncluded = spec->lower.set ? spec->lower.included : true,
+        .upperBound = spec->upper.set ? spec->upper.value : posInf,
+        .ubIncluded = spec->upper.set ? spec->upper.included : true,
+        .payloadId = payloadId,
+        .firstOp = spec->firstOp,
+        .secondOp = spec->secondOp,
+        .indexMin = indexMin,
+        .indexMax = indexMax,
+        .precision = range_opts->precision,
+        .maxContentionCounter = maxContentionCounter,
+        .sparsity = range_opts->sparsity,
+        .trimFactor = range_opts->trimFactor};
 
     // First operator is the non-stub.
     if (!mc_makeRangeFindPlaceholder(&args, &p1, status)) {
@@ -486,7 +508,8 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
                                                    .firstOp = spec->firstOp,
                                                    .secondOp = spec->secondOp,
                                                    .maxContentionCounter = maxContentionCounter,
-                                                   .sparsity = range_opts->sparsity};
+                                                   .sparsity = range_opts->sparsity,
+                                                   .trimFactor = range_opts->trimFactor};
 
         // First operator is the non-stub.
         if (!mc_makeRangeFindPlaceholder(&args, &p2, status)) {
@@ -509,7 +532,8 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
         bson_t elem;
         TRY(BSON_APPEND_DOCUMENT_BEGIN(&and, "0", &elem));
         bson_t operator;
-        TRY(BSON_APPEND_ARRAY_BEGIN(&elem, mc_FLE2RangeOperator_to_string(spec->firstOp), &operator));
+        TRY(BSON_APPEND_ARRAY_BEGIN(
+            &elem, mc_FLE2RangeOperator_to_string(spec->firstOp), &operator));
         TRY(BSON_APPEND_UTF8(&operator, "0", spec->field));
         TRY(_mongocrypt_buffer_append(&p1, &operator, "1", 1));
         TRY(bson_append_array_end(&elem, &operator));
@@ -517,7 +541,8 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
 
         if (spec->nOps == 2) {
             TRY(BSON_APPEND_DOCUMENT_BEGIN(&and, "1", &elem));
-            TRY(BSON_APPEND_ARRAY_BEGIN(&elem, mc_FLE2RangeOperator_to_string(spec->secondOp), &operator));
+            TRY(BSON_APPEND_ARRAY_BEGIN(
+                &elem, mc_FLE2RangeOperator_to_string(spec->secondOp), &operator));
             TRY(BSON_APPEND_UTF8(&operator, "0", spec->field));
             TRY(_mongocrypt_buffer_append(&p2, &operator, "1", 1));
             TRY(bson_append_array_end(&elem, &operator));
@@ -541,7 +566,7 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
         TRY(BSON_APPEND_DOCUMENT_BEGIN(&and, "0", &elem));
         bson_t operator;
         TRY(BSON_APPEND_DOCUMENT_BEGIN(&elem, spec->field, &operator));
-        const char *op_str = mc_FLE2RangeOperator_to_string(spec->firstOp);
+        const char* op_str = mc_FLE2RangeOperator_to_string(spec->firstOp);
         TRY(_mongocrypt_buffer_append(&p1, &operator, op_str, -1));
         TRY(bson_append_document_end(&elem, &operator));
         TRY(bson_append_document_end(&and, &elem));
@@ -549,7 +574,7 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *sp
         if (spec->nOps == 2) {
             TRY(BSON_APPEND_DOCUMENT_BEGIN(&and, "1", &elem));
             TRY(BSON_APPEND_DOCUMENT_BEGIN(&elem, spec->field, &operator));
-            const char *op_str = mc_FLE2RangeOperator_to_string(spec->secondOp);
+            const char* op_str = mc_FLE2RangeOperator_to_string(spec->secondOp);
             TRY(_mongocrypt_buffer_append(&p2, &operator, op_str, -1));
             TRY(bson_append_document_end(&elem, &operator));
             TRY(bson_append_document_end(&and, &elem));

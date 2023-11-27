@@ -101,27 +101,30 @@ typedef struct {
     UINT_T _rangeMin;
     UINT_T _rangeMax;
     size_t _sparsity;
+    size_t _trimFactor;
     // _maxlen is the maximum bit length of edges in the mincover.
     size_t _maxlen;
 } DECORATE_NAME(MinCoverGenerator);
-
-static inline DECORATE_NAME(MinCoverGenerator)
-    * DECORATE_NAME(MinCoverGenerator_new)(UINT_T rangeMin,
-                                           UINT_T rangeMax,
-                                           UINT_T max,
-                                           size_t sparsity,
-                                           mongocrypt_status_t *status) {
+// TODO SERVER-83083 any changes to mincovergenerator must be ere
+static inline DECORATE_NAME(MinCoverGenerator) *
+    DECORATE_NAME(MinCoverGenerator_new)(UINT_T rangeMin,
+                                         UINT_T rangeMax,
+                                         UINT_T max,
+                                         size_t sparsity,
+                                         size_t trimFactor,
+                                         mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(status);
 
     if (UINT_COMPARE(rangeMin, rangeMax) > 0) {
-        CLIENT_ERR("Range min (%" UINT_FMT_S ") must be less than or equal to range max (%" UINT_FMT_S
-                   ") for range search",
+        CLIENT_ERR("Range min (%" UINT_FMT_S
+                   ") must be less than or equal to range max (%" UINT_FMT_S ") for range search",
                    UINT_FMT_ARG(rangeMin),
                    UINT_FMT_ARG(rangeMax));
         return NULL;
     }
     if (UINT_COMPARE(rangeMax, max) > 0) {
-        CLIENT_ERR("Range max (%" UINT_FMT_S ") must be less than or equal to max (%" UINT_FMT_S ") for range search",
+        CLIENT_ERR("Range max (%" UINT_FMT_S ") must be less than or equal to max (%" UINT_FMT_S
+                   ") for range search",
                    UINT_FMT_ARG(rangeMax),
                    UINT_FMT_ARG(max));
         return NULL;
@@ -131,15 +134,17 @@ static inline DECORATE_NAME(MinCoverGenerator)
         CLIENT_ERR("Sparsity must be > 0");
         return NULL;
     }
-    DECORATE_NAME(MinCoverGenerator) *mcg = bson_malloc0(sizeof(DECORATE_NAME(MinCoverGenerator)));
+    DECORATE_NAME(MinCoverGenerator)* mcg = bson_malloc0(sizeof(DECORATE_NAME(MinCoverGenerator)));
     mcg->_rangeMin = rangeMin;
     mcg->_rangeMax = rangeMax;
     mcg->_maxlen = (size_t)BITS - DECORATE_NAME(mc_count_leading_zeros)(max);
     mcg->_sparsity = sparsity;
+    mcg->_trimFactor = trimFactor;
     return mcg;
 }
 
-static inline void DECORATE_NAME(MinCoverGenerator_destroy)(DECORATE_NAME(MinCoverGenerator) * mcg) {
+static inline void DECORATE_NAME(MinCoverGenerator_destroy)(DECORATE_NAME(MinCoverGenerator) *
+                                                            mcg) {
     bson_free(mcg);
 }
 
@@ -160,15 +165,17 @@ static inline UINT_T DECORATE_NAME(applyMask)(UINT_T value, size_t maskedBits) {
     return UINT_BITOR(value, mask);
 }
 
-static inline bool DECORATE_NAME(MinCoverGenerator_isLevelStored)(DECORATE_NAME(MinCoverGenerator) * mcg,
+static inline bool DECORATE_NAME(MinCoverGenerator_isLevelStored)(DECORATE_NAME(MinCoverGenerator) *
+                                                                      mcg,
                                                                   size_t maskedBits) {
     BSON_ASSERT_PARAM(mcg);
     size_t level = mcg->_maxlen - maskedBits;
-    return 0 == maskedBits || 0 == (level % mcg->_sparsity);
+    return 0 == maskedBits || (level >= mcg->_trimFactor && 0 == (level % mcg->_sparsity));
 }
 
-char *
-DECORATE_NAME(MinCoverGenerator_toString)(DECORATE_NAME(MinCoverGenerator) * mcg, UINT_T start, size_t maskedBits) {
+char* DECORATE_NAME(MinCoverGenerator_toString)(DECORATE_NAME(MinCoverGenerator) * mcg,
+                                                UINT_T start,
+                                                size_t maskedBits) {
     BSON_ASSERT_PARAM(mcg);
     BSON_ASSERT(maskedBits <= mcg->_maxlen);
     BSON_ASSERT(maskedBits <= (size_t)BITS);
@@ -180,25 +187,26 @@ DECORATE_NAME(MinCoverGenerator_toString)(DECORATE_NAME(MinCoverGenerator) * mcg
 
     UINT_T shifted = UINT_LSHIFT(start, -(int)maskedBits);
     mc_bitstring valueBin = DECORATE_NAME(mc_convert_to_bitstring)(shifted);
-    char *ret = bson_strndup(valueBin.str + ((size_t)BITS - mcg->_maxlen + maskedBits), mcg->_maxlen + maskedBits);
+    char* ret = bson_strndup(valueBin.str + ((size_t)BITS - mcg->_maxlen + maskedBits),
+                             mcg->_maxlen + maskedBits);
     return ret;
 }
 
-static inline void DECORATE_NAME(MinCoverGenerator_minCoverRec)(DECORATE_NAME(MinCoverGenerator) * mcg,
-                                                                mc_array_t *c,
-                                                                UINT_T blockStart,
-                                                                size_t maskedBits) {
+static inline void DECORATE_NAME(MinCoverGenerator_minCoverRec)(
+    DECORATE_NAME(MinCoverGenerator) * mcg, mc_array_t* c, UINT_T blockStart, size_t maskedBits) {
     BSON_ASSERT_PARAM(mcg);
     BSON_ASSERT_PARAM(c);
     const UINT_T blockEnd = DECORATE_NAME(applyMask)(blockStart, maskedBits);
 
-    if (UINT_COMPARE(blockEnd, mcg->_rangeMin) < 0 || UINT_COMPARE(blockStart, mcg->_rangeMax) > 0) {
+    if (UINT_COMPARE(blockEnd, mcg->_rangeMin) < 0 ||
+        UINT_COMPARE(blockStart, mcg->_rangeMax) > 0) {
         return;
     }
 
-    if (UINT_COMPARE(blockStart, mcg->_rangeMin) >= 0 && UINT_COMPARE(blockEnd, mcg->_rangeMax) <= 0
-        && DECORATE_NAME(MinCoverGenerator_isLevelStored)(mcg, maskedBits)) {
-        char *edge = DECORATE_NAME(MinCoverGenerator_toString)(mcg, blockStart, maskedBits);
+    if (UINT_COMPARE(blockStart, mcg->_rangeMin) >= 0 &&
+        UINT_COMPARE(blockEnd, mcg->_rangeMax) <= 0 &&
+        DECORATE_NAME(MinCoverGenerator_isLevelStored)(mcg, maskedBits)) {
+        char* edge = DECORATE_NAME(MinCoverGenerator_toString)(mcg, blockStart, maskedBits);
         _mc_array_append_val(c, edge);
         return;
     }
@@ -211,9 +219,10 @@ static inline void DECORATE_NAME(MinCoverGenerator_minCoverRec)(DECORATE_NAME(Mi
     (mcg, c, UINT_BITOR(blockStart, UINT_LSHIFT(UINT_C(1), (int)newBits)), newBits);
 }
 
-static inline mc_mincover_t *DECORATE_NAME(MinCoverGenerator_minCover)(DECORATE_NAME(MinCoverGenerator) * mcg) {
+static inline mc_mincover_t* DECORATE_NAME(MinCoverGenerator_minCover)(
+    DECORATE_NAME(MinCoverGenerator) * mcg) {
     BSON_ASSERT_PARAM(mcg);
-    mc_mincover_t *mc = mc_mincover_new();
+    mc_mincover_t* mc = mc_mincover_new();
     DECORATE_NAME(MinCoverGenerator_minCoverRec)
     (mcg, &mc->mincover, ZERO, mcg->_maxlen);
     return mc;
@@ -223,19 +232,20 @@ static inline mc_mincover_t *DECORATE_NAME(MinCoverGenerator_minCover)(DECORATE_
 // decrements *upperBound if includeUpperBound is false.
 // lowerBound, min, upperBound, and max are expected to come from the result
 // of mc_getTypeInfo.
-static bool DECORATE_NAME(adjustBounds)(UINT_T *lowerBound,
+static bool DECORATE_NAME(adjustBounds)(UINT_T* lowerBound,
                                         bool includeLowerBound,
                                         UINT_T min,
-                                        UINT_T *upperBound,
+                                        UINT_T* upperBound,
                                         bool includeUpperBound,
                                         UINT_T max,
-                                        mongocrypt_status_t *status) {
+                                        mongocrypt_status_t* status) {
     BSON_ASSERT_PARAM(lowerBound);
     BSON_ASSERT_PARAM(upperBound);
 
     if (!includeLowerBound) {
         if (UINT_COMPARE(*lowerBound, max) >= 0) {
-            CLIENT_ERR("Lower bound (%" UINT_FMT_S ") must be less than the range maximum (%" UINT_FMT_S
+            CLIENT_ERR("Lower bound (%" UINT_FMT_S
+                       ") must be less than the range maximum (%" UINT_FMT_S
                        ") if lower bound is excluded from range.",
                        UINT_FMT_ARG(*lowerBound),
                        UINT_FMT_ARG(max));
@@ -245,7 +255,8 @@ static bool DECORATE_NAME(adjustBounds)(UINT_T *lowerBound,
     }
     if (!includeUpperBound) {
         if (UINT_COMPARE(*upperBound, min) <= 0) {
-            CLIENT_ERR("Upper bound (%" UINT_FMT_S ") must be greater than the range minimum (%" UINT_FMT_S
+            CLIENT_ERR("Upper bound (%" UINT_FMT_S
+                       ") must be greater than the range minimum (%" UINT_FMT_S
                        ") if upper bound is excluded from range.",
                        UINT_FMT_ARG(*upperBound),
                        UINT_FMT_ARG(min));
