@@ -123,8 +123,7 @@ struct _mongocrypt_t {
     _mongocrypt_crypto_t *crypto;
     /* A counter, protected by mutex, for generating unique context ids */
     uint32_t ctx_counter;
-    _mongocrypt_cache_oauth_t *cache_oauth_azure;
-    _mongocrypt_cache_oauth_t *cache_oauth_gcp;
+    mc_mapof_kmsid_to_token_t *cache_oauth;
     /// A CSFLE DLL vtable, initialized by mongocrypt_init
     _mongo_crypt_v1_vtable csfle;
     /// Pointer to the global csfle_lib object. Should not be freed directly.
@@ -154,18 +153,15 @@ char *_mongocrypt_new_string_from_bytes(const void *in, int len);
 
 char *_mongocrypt_new_json_string_from_binary(mongocrypt_binary_t *binary);
 
-bool _mongocrypt_parse_kms_providers(mongocrypt_binary_t *kms_providers_definition,
-                                     _mongocrypt_opts_kms_providers_t *kms_providers,
-                                     mongocrypt_status_t *status,
-                                     _mongocrypt_log_t *log);
-
 /* _mongocrypt_needs_credentials returns true if @crypt was configured to
  * request credentials for any KMS provider. */
 bool _mongocrypt_needs_credentials(mongocrypt_t *crypt);
 
 /* _mongocrypt_needs_credentials returns true if @crypt was configured to
- * request credentials for @provider. */
-bool _mongocrypt_needs_credentials_for_provider(mongocrypt_t *crypt, _mongocrypt_kms_provider_t provider);
+ * request credentials for @provider and optional @name. @name may be NULL. */
+bool _mongocrypt_needs_credentials_for_provider(mongocrypt_t *crypt,
+                                                _mongocrypt_kms_provider_t provider,
+                                                const char *name);
 
 /**
  * Enable/disable the use of FLE2v2 payload types for write.

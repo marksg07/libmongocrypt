@@ -402,7 +402,7 @@ bool mc_makeRangeFindPlaceholder(mc_makeRangeFindPlaceholder_args_t* args,
     TRY(_mongocrypt_buffer_append(args->index_key_id, p, "ki", 2));
     TRY(_mongocrypt_buffer_append(args->user_key_id, p, "ku", 2));
     TRY(BSON_APPEND_DOCUMENT(p, "v", v));
-    TRY(BSON_APPEND_INT64(p, "cm", args->maxContentionCounter));
+    TRY(BSON_APPEND_INT64(p, "cm", args->maxContentionFactor));
     TRY(BSON_APPEND_INT64(p, "s", args->sparsity));
     TRY(BSON_APPEND_INT64(p, "tf", args->trimFactor));
 #undef TRY
@@ -421,11 +421,11 @@ fail:
     return ok;
 }
 
-bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t* spec,
-                                                const mc_RangeOpts_t* range_opts,
-                                                int64_t maxContentionCounter,
-                                                const _mongocrypt_buffer_t* user_key_id,
-                                                const _mongocrypt_buffer_t* index_key_id,
+bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t *spec,
+                                                const mc_RangeOpts_t *range_opts,
+                                                int64_t maxContentionFactor,
+                                                const _mongocrypt_buffer_t *user_key_id,
+                                                const _mongocrypt_buffer_t *index_key_id,
                                                 int32_t payloadId,
                                                 bson_t* out,
                                                 mongocrypt_status_t* status) {
@@ -476,23 +476,22 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t* sp
         TRY(bson_iter_init_find(&indexMax, &minMaxDoc, "indexMax"));
     }
 
-    mc_makeRangeFindPlaceholder_args_t args = {
-        .isStub = false,
-        .user_key_id = user_key_id,
-        .index_key_id = index_key_id,
-        .lowerBound = spec->lower.set ? spec->lower.value : negInf,
-        .lbIncluded = spec->lower.set ? spec->lower.included : true,
-        .upperBound = spec->upper.set ? spec->upper.value : posInf,
-        .ubIncluded = spec->upper.set ? spec->upper.included : true,
-        .payloadId = payloadId,
-        .firstOp = spec->firstOp,
-        .secondOp = spec->secondOp,
-        .indexMin = indexMin,
-        .indexMax = indexMax,
-        .precision = range_opts->precision,
-        .maxContentionCounter = maxContentionCounter,
-        .sparsity = range_opts->sparsity,
-        .trimFactor = range_opts->trimFactor};
+    mc_makeRangeFindPlaceholder_args_t args = {.isStub = false,
+                                               .user_key_id = user_key_id,
+                                               .index_key_id = index_key_id,
+                                               .lowerBound = spec->lower.set ? spec->lower.value : negInf,
+                                               .lbIncluded = spec->lower.set ? spec->lower.included : true,
+                                               .upperBound = spec->upper.set ? spec->upper.value : posInf,
+                                               .ubIncluded = spec->upper.set ? spec->upper.included : true,
+                                               .payloadId = payloadId,
+                                               .firstOp = spec->firstOp,
+                                               .secondOp = spec->secondOp,
+                                               .indexMin = indexMin,
+                                               .indexMax = indexMax,
+                                               .precision = range_opts->precision,
+                                               .maxContentionFactor = maxContentionFactor,
+                                               .sparsity = range_opts->sparsity,
+                                               .trimFactor = range_opts->trimFactor};
 
     // First operator is the non-stub.
     if (!mc_makeRangeFindPlaceholder(&args, &p1, status)) {
@@ -507,7 +506,7 @@ bool mc_FLE2RangeFindDriverSpec_to_placeholders(mc_FLE2RangeFindDriverSpec_t* sp
                                                    .payloadId = payloadId,
                                                    .firstOp = spec->firstOp,
                                                    .secondOp = spec->secondOp,
-                                                   .maxContentionCounter = maxContentionCounter,
+                                                   .maxContentionFactor = maxContentionFactor,
                                                    .sparsity = range_opts->sparsity,
                                                    .trimFactor = range_opts->trimFactor};
 

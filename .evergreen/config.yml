@@ -258,36 +258,14 @@ functions:
             bash ./libmongocrypt/.evergreen/build_all.sh
           env ${compile_env|} bash ./libmongocrypt/.evergreen/compile_cs.sh
 
-  "build python release macos":
-    - command: shell.exec
-      params:
-        script: |
-          set -ex
-          cd ./libmongocrypt/bindings/python
-          PYTHON=${PYTHON} MACOS_TARGET=${MACOS_TARGET} ./release.sh
-
   "build python release":
     - command: shell.exec
       params:
+        shell: bash
         script: |
           set -ex
           cd ./libmongocrypt/bindings/python
-          ./release.sh
-
-  "test python release":
-    - command: shell.exec
-      params:
-        script: |
-          set -ex
-          cd ./libmongocrypt/bindings/python
-          ROOT=$(pwd)
-          for file in ./dist/*.whl; do
-            ${PYTHON} -m pip uninstall -y pymongocrypt
-            ${PYTHON} -m pip install --upgrade --user $file
-            cd $HOME
-            ${PYTHON} -c "import pymongocrypt; print(pymongocrypt.libmongocrypt_version())"
-            cd $ROOT
-          done
+          PYTHON=${PYTHON} ./release.sh
 
   "upload python release":
     - command: archive.targz_pack
@@ -470,8 +448,7 @@ tasks:
   run_on: macos-1100
   commands:
     - func: "fetch source"
-    - func: "build python release macos"
-    - func: "test python release"
+    - func: "build python release"
       vars: { PYTHON: /Library/Frameworks/Python.framework/Versions/3.10/bin/python3 }
     - func: "upload python release"
 
@@ -480,22 +457,18 @@ tasks:
   run_on: macos-1014
   commands:
     - func: "fetch source"
-    - func: "build python release macos"
+    - func: "build python release"
       vars:
         PYTHON: /Library/Frameworks/Python.framework/Versions/3.7/bin/python3
-        MACOS_TARGET: macos_x86_64
-    - func: "test python release"
-      vars: { PYTHON: /Library/Frameworks/Python.framework/Versions/3.7/bin/python3 }
     - func: "upload python release"
 
 - name: "release-python-linux"
   tags: ["release_python_tag"]
-  run_on: rhel76-large
+  run_on: ubuntu2004-large
   exec_timeout_secs: 216000  # 60 minutes (manylinux task is slow).
   commands:
     - func: "fetch source"
     - func: "build python release"
-    - func: "test python release"
       vars: { PYTHON: /opt/python/3.7/bin/python3 }
     - func: "upload python release"
 
@@ -505,7 +478,6 @@ tasks:
   commands:
     - func: "fetch source"
     - func: "build python release"
-    - func: "test python release"
       vars: { PYTHON: C:/python/Python37/python.exe }
     - func: "upload python release"
 
@@ -637,6 +609,10 @@ tasks:
       name: build-and-test-and-upload
     - variant: amazon2-arm64
       name: build-and-test-and-upload
+    - variant: amazon2023
+      name: build-and-test-and-upload
+    - variant: amazon2023-arm64
+      name: build-and-test-and-upload
     - variant: debian11
       name: build-and-test-and-upload
     - variant: debian10
@@ -650,6 +626,16 @@ tasks:
     - variant: rhel-71-ppc64el
       name: build-and-test-and-upload
     - variant: rhel-80-64-bit
+      name: build-and-test-and-upload
+    - variant: rhel-81-ppc64el
+      name: build-and-test-and-upload
+    - variant: rhel-82-arm64
+      name: build-and-test-and-upload
+    - variant: rhel-83-zseries
+      name: build-and-test-and-upload
+    - variant: rhel-91-64-bit
+      name: build-and-test-and-upload
+    - variant: rhel-91-arm64
       name: build-and-test-and-upload
     - variant: suse12-64
       name: build-and-test-and-upload
@@ -691,6 +677,10 @@ tasks:
     - func: "download tarball"
       vars: { variant_name: "amazon2-arm64" }
     - func: "download tarball"
+      vars: { variant_name: "amazon2023" }
+    - func: "download tarball"
+      vars: { variant_name: "amazon2023-arm64" }
+    - func: "download tarball"
       vars: { variant_name: "debian11" }
     - func: "download tarball"
       vars: { variant_name: "debian10" }
@@ -704,6 +694,16 @@ tasks:
       vars: { variant_name: "rhel-71-ppc64el" }
     - func: "download tarball"
       vars: { variant_name: "rhel-80-64-bit" }
+    - func: "download tarball"
+      vars: { variant_name: "rhel-81-ppc64el" }
+    - func: "download tarball"
+      vars: { variant_name: "rhel-82-arm64" }
+    - func: "download tarball"
+      vars: { variant_name: "rhel-83-zseries" }
+    - func: "download tarball"
+      vars: { variant_name: "rhel-91-64-bit" }
+    - func: "download tarball"
+      vars: { variant_name: "rhel-91-arm64" }
     - func: "download tarball"
       vars: { variant_name: "suse12-64" }
     - func: "download tarball"
@@ -987,6 +987,19 @@ tasks:
       params:
         file: libmongocrypt/bindings/java/mongocrypt/benchmarks/results.json
 
+- name: benchmark-python
+  commands:
+    - func: "fetch source"
+    - command: "subprocess.exec"
+      params:
+        binary: bash
+        working_dir: "./libmongocrypt"
+        args:
+          - "./.evergreen/benchmark-python.sh"
+    - command: "perf.send"
+      params:
+        file: libmongocrypt/bindings/python/results.json
+
 pre:
   # Update the evergreen expansion to dynamically set the ${libmongocrypt_s3_suffix} and ${libmongocrypt_s3_suffix_copy} expansions.
   - command: "shell.exec"
@@ -1078,6 +1091,8 @@ buildvariants:
   run_on: rhel83-zseries-small
   tasks:
   - build-and-test-and-upload
+  - build-and-test-node
+  - build-and-publish-node
 - name: windows-vs2015-compile
   display_name: "Windows VS 2015 compile"
   run_on: windows-64-vs2015-test
@@ -1151,7 +1166,7 @@ buildvariants:
   expansions:
     has_packages: true
     packager_distro: amazon2
-    packager_arch: arm64
+    packager_arch: aarch64
     node_lts_version: 16
   tasks:
   - build-and-test-and-upload
@@ -1180,7 +1195,7 @@ buildvariants:
   expansions:
     has_packages: true
     packager_distro: amazon2023
-    packager_arch: arm64
+    packager_arch: aarch64
     node_lts_version: 16
   tasks:
   - build-and-test-and-upload
@@ -1199,7 +1214,7 @@ buildvariants:
   - build-and-test-shared-bson
   - build-and-test-asan
   - build-and-test-node
-  # - test-java - Fails with `JAVA_HOME is set to an invalid directory`. Unskip once MONGOCRYPT-593 is resolved.
+  - test-java
   - name: publish-packages
     distros:
     - ubuntu2004-small
@@ -1302,9 +1317,10 @@ buildvariants:
   expansions:
     has_packages: true
     packager_distro: rhel82
-    packager_arch: arm64
+    packager_arch: aarch64
   tasks:
   - build-and-test-and-upload
+  - test-python
   - name: publish-packages
     distros:
     - rhel70-small
@@ -1350,7 +1366,7 @@ buildvariants:
   expansions:
     has_packages: true
     packager_distro: rhel91
-    packager_arch: arm64
+    packager_arch: aarch64
   tasks:
   - build-and-test-and-upload
   - name: publish-packages
@@ -1483,7 +1499,6 @@ buildvariants:
   - build-and-test-shared-bson
   - build-and-test-asan
   - build-and-test-node
-  # - test-java - Fails with `JAVA_HOME is set to an invalid directory`. Unskip once MONGOCRYPT-593 is resolved.
   - name: publish-packages
     distros:
     - ubuntu2004-small
@@ -1520,7 +1535,6 @@ buildvariants:
   - build-and-test-shared-bson
   - build-and-test-asan
   - build-and-test-node
-  # - test-java - Fails with `JAVA_HOME is set to an invalid directory`. Unskip once MONGOCRYPT-593 is resolved.
   - name: publish-packages
     distros:
     - ubuntu2004-small
@@ -1569,3 +1583,4 @@ buildvariants:
   run_on: rhel90-dbx-perf-large
   tasks:
   - benchmark-java
+  - benchmark-python

@@ -80,6 +80,9 @@ typedef struct {
         _mongocrypt_aws_kek_t aws;
         _mongocrypt_kmip_kek_t kmip;
     } provider;
+
+    char *kmsid;
+    const char *kmsid_name;
 } _mongocrypt_kek_t;
 
 /* Parse a document describing a key encryption key.

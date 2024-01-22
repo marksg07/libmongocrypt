@@ -202,64 +202,69 @@ void _mongocrypt_marking_cleanup(_mongocrypt_marking_t* marking) {
  * Calculates:
  * E?CToken = HMAC(collectionLevel1Token, n)
  * E?CDerivedFromDataToken = HMAC(E?CToken, value)
- * E?CDerivedFromDataTokenAndCounter = HMAC(E?CDerivedFromDataToken, c)
+ * E?CDerivedFromDataTokenAndContentionFactor = HMAC(E?CDerivedFromDataToken, cf)
  *
  * E?C = EDC|ESC|ECC
  * n = 1 for EDC, 2 for ESC, 3 for ECC
- * c = maxContentionCounter
+ * cf = contentionFactor
  *
- * E?CDerivedFromDataTokenAndCounter is saved to out,
- * which is initialized even on failure.
+ * If {useContentionFactor} is False, E?CDerivedFromDataToken is saved to out, and {contentionFactor} is ignored.
+ * Otherwise, E?CDerivedFromDataTokenAndContentionFactor is saved to out using {contentionFactor}.
+ *
+ * Note that {out} is initialized even on failure.
  */
-#define DERIVE_TOKEN_IMPL(Name)                                                                  \
-    static bool _fle2_derive_##Name##_token(_mongocrypt_crypto_t* crypto,                        \
-                                            _mongocrypt_buffer_t* out,                           \
-                                            const mc_CollectionsLevel1Token_t* level1Token,      \
-                                            const _mongocrypt_buffer_t* value,                   \
-                                            bool useCounter,                                     \
-                                            int64_t counter,                                     \
-                                            mongocrypt_status_t* status) {                       \
-        BSON_ASSERT_PARAM(crypto);                                                               \
-        BSON_ASSERT_PARAM(out);                                                                  \
-        BSON_ASSERT_PARAM(level1Token);                                                          \
-        BSON_ASSERT_PARAM(value);                                                                \
-                                                                                                 \
-        _mongocrypt_buffer_init(out);                                                            \
-                                                                                                 \
-        mc_##Name##Token_t* token = mc_##Name##Token_new(crypto, level1Token, status);           \
-        if (!token) {                                                                            \
-            return false;                                                                        \
-        }                                                                                        \
-                                                                                                 \
-        mc_##Name##DerivedFromDataToken_t* fromDataToken =                                       \
-            mc_##Name##DerivedFromDataToken_new(crypto, token, value, status);                   \
-        mc_##Name##Token_destroy(token);                                                         \
-        if (!fromDataToken) {                                                                    \
-            return false;                                                                        \
-        }                                                                                        \
-                                                                                                 \
-        if (!useCounter) {                                                                       \
-            /* FindEqualityPayload uses *fromDataToken */                                        \
-            _mongocrypt_buffer_copy_to(mc_##Name##DerivedFromDataToken_get(fromDataToken), out); \
-            mc_##Name##DerivedFromDataToken_destroy(fromDataToken);                              \
-            return true;                                                                         \
-        }                                                                                        \
-                                                                                                 \
-        BSON_ASSERT(counter >= 0);                                                               \
-        /* InsertUpdatePayload continues through *fromDataTokenAndCounter */                     \
-        mc_##Name##DerivedFromDataTokenAndCounter_t* fromTokenAndCounter =                       \
-            mc_##Name##DerivedFromDataTokenAndCounter_new(                                       \
-                crypto, fromDataToken, (uint64_t)counter, status);                               \
-        mc_##Name##DerivedFromDataToken_destroy(fromDataToken);                                  \
-        if (!fromTokenAndCounter) {                                                              \
-            return false;                                                                        \
-        }                                                                                        \
-                                                                                                 \
-        _mongocrypt_buffer_copy_to(                                                              \
-            mc_##Name##DerivedFromDataTokenAndCounter_get(fromTokenAndCounter), out);            \
-        mc_##Name##DerivedFromDataTokenAndCounter_destroy(fromTokenAndCounter);                  \
-                                                                                                 \
-        return true;                                                                             \
+#define DERIVE_TOKEN_IMPL(Name)                                                                                        \
+    static bool _fle2_derive_##Name##_token(_mongocrypt_crypto_t *crypto,                                              \
+                                            _mongocrypt_buffer_t *out,                                                 \
+                                            const mc_CollectionsLevel1Token_t *level1Token,                            \
+                                            const _mongocrypt_buffer_t *value,                                         \
+                                            bool useContentionFactor,                                                  \
+                                            int64_t contentionFactor,                                                  \
+                                            mongocrypt_status_t *status) {                                             \
+        BSON_ASSERT_PARAM(crypto);                                                                                     \
+        BSON_ASSERT_PARAM(out);                                                                                        \
+        BSON_ASSERT_PARAM(level1Token);                                                                                \
+        BSON_ASSERT_PARAM(value);                                                                                      \
+                                                                                                                       \
+        _mongocrypt_buffer_init(out);                                                                                  \
+                                                                                                                       \
+        mc_##Name##Token_t *token = mc_##Name##Token_new(crypto, level1Token, status);                                 \
+        if (!token) {                                                                                                  \
+            return false;                                                                                              \
+        }                                                                                                              \
+                                                                                                                       \
+        mc_##Name##DerivedFromDataToken_t *fromDataToken =                                                             \
+            mc_##Name##DerivedFromDataToken_new(crypto, token, value, status);                                         \
+        mc_##Name##Token_destroy(token);                                                                               \
+        if (!fromDataToken) {                                                                                          \
+            return false;                                                                                              \
+        }                                                                                                              \
+                                                                                                                       \
+        if (!useContentionFactor) {                                                                                    \
+            /* FindEqualityPayload uses *fromDataToken */                                                              \
+            _mongocrypt_buffer_copy_to(mc_##Name##DerivedFromDataToken_get(fromDataToken), out);                       \
+            mc_##Name##DerivedFromDataToken_destroy(fromDataToken);                                                    \
+            return true;                                                                                               \
+        }                                                                                                              \
+                                                                                                                       \
+        BSON_ASSERT(contentionFactor >= 0);                                                                            \
+        /* InsertUpdatePayload continues through *fromDataTokenAndContentionFactor */                                  \
+        mc_##Name##DerivedFromDataTokenAndContentionFactor_t *fromTokenAndContentionFactor =                           \
+            mc_##Name##DerivedFromDataTokenAndContentionFactor_new(crypto,                                             \
+                                                                   fromDataToken,                                      \
+                                                                   (uint64_t)contentionFactor,                         \
+                                                                   status);                                            \
+        mc_##Name##DerivedFromDataToken_destroy(fromDataToken);                                                        \
+        if (!fromTokenAndContentionFactor) {                                                                           \
+            return false;                                                                                              \
+        }                                                                                                              \
+                                                                                                                       \
+        _mongocrypt_buffer_copy_to(                                                                                    \
+            mc_##Name##DerivedFromDataTokenAndContentionFactor_get(fromTokenAndContentionFactor),                      \
+            out);                                                                                                      \
+        mc_##Name##DerivedFromDataTokenAndContentionFactor_destroy(fromTokenAndContentionFactor);                      \
+                                                                                                                       \
+        return true;                                                                                                   \
     }
 
 DERIVE_TOKEN_IMPL(EDC)
@@ -374,8 +379,8 @@ static bool _fle2_placeholder_aes_aead_encrypt(
     return true;
 }
 
-// p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndCounter ||
-//                            ECCDerivedFromDataTokenAndCounter)
+// p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndContentionFactor ||
+//                            ECCDerivedFromDataTokenAndContentionFactor)
 static bool _fle2_derive_encrypted_token(_mongocrypt_crypto_t *crypto,
                                          _mongocrypt_buffer_t *out,
                                          const mc_CollectionsLevel1Token_t *collectionsLevel1Token,
@@ -480,13 +485,13 @@ static bool _get_tokenKey(_mongocrypt_key_broker_t* kb,
     return true;
 }
 
-static bool _mongocrypt_fle2_placeholder_common(_mongocrypt_key_broker_t* kb,
-                                                _FLE2EncryptedPayloadCommon_t* ret,
-                                                const _mongocrypt_buffer_t* indexKeyId,
-                                                const _mongocrypt_buffer_t* value,
-                                                bool useCounter,
-                                                int64_t maxContentionCounter,
-                                                mongocrypt_status_t* status) {
+static bool _mongocrypt_fle2_placeholder_common(_mongocrypt_key_broker_t *kb,
+                                                _FLE2EncryptedPayloadCommon_t *ret,
+                                                const _mongocrypt_buffer_t *indexKeyId,
+                                                const _mongocrypt_buffer_t *value,
+                                                bool useContentionFactor,
+                                                int64_t contentionFactor,
+                                                mongocrypt_status_t *status) {
     BSON_ASSERT_PARAM(kb);
     BSON_ASSERT_PARAM(ret);
     BSON_ASSERT_PARAM(indexKeyId);
@@ -517,8 +522,8 @@ static bool _mongocrypt_fle2_placeholder_common(_mongocrypt_key_broker_t* kb,
                                 &ret->edcDerivedToken,
                                 ret->collectionsLevel1Token,
                                 value,
-                                useCounter,
-                                maxContentionCounter,
+                                useContentionFactor,
+                                contentionFactor,
                                 status)) {
         goto fail;
     }
@@ -527,8 +532,8 @@ static bool _mongocrypt_fle2_placeholder_common(_mongocrypt_key_broker_t* kb,
                                 &ret->escDerivedToken,
                                 ret->collectionsLevel1Token,
                                 value,
-                                useCounter,
-                                maxContentionCounter,
+                                useContentionFactor,
+                                contentionFactor,
                                 status)) {
         goto fail;
     }
@@ -555,8 +560,8 @@ static bool _mongocrypt_fle2_placeholder_common(_mongocrypt_key_broker_t* kb,
                                     &ret->eccDerivedToken,
                                     ret->collectionsLevel1Token,
                                     value,
-                                    useCounter,
-                                    maxContentionCounter,
+                                    useContentionFactor,
+                                    contentionFactor,
                                     status)) {
             goto fail;
         }
@@ -594,11 +599,10 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common_v1(
     bool res = false;
 
     *contentionFactor = 0;
-    if (placeholder->maxContentionCounter > 0) {
+    if (placeholder->maxContentionFactor > 0) {
         /* Choose a random contentionFactor in the inclusive range [0,
-         * placeholder->maxContentionCounter] */
-        if (!_mongocrypt_random_int64(
-                crypto, placeholder->maxContentionCounter + 1, contentionFactor, status)) {
+         * placeholder->maxContentionFactor] */
+        if (!_mongocrypt_random_int64(crypto, placeholder->maxContentionFactor + 1, contentionFactor, status)) {
             goto fail;
         }
     }
@@ -608,7 +612,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common_v1(
                                              common,
                                              &placeholder->index_key_id,
                                              &value,
-                                             true, /* derive tokens using counter */
+                                             true, /* derive tokens using contentionFactor */
                                              *contentionFactor,
                                              status)) {
         goto fail;
@@ -621,8 +625,8 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common_v1(
     // c := ECCDerivedToken
     _mongocrypt_buffer_steal(&out->eccDerivedToken, &common->eccDerivedToken);
 
-    // p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndCounter ||
-    // ECCDerivedFromDataTokenAndCounter)
+    // p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndContentionFactor ||
+    // ECCDerivedFromDataTokenAndContentionFactor)
     if (!_fle2_derive_encrypted_token(crypto,
                                       &out->encryptedTokens,
                                       common->collectionsLevel1Token,
@@ -738,12 +742,11 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common(
     _mongocrypt_buffer_t value = {0};
     bool res = false;
 
-    out->contentionFactor = 0;  // k
-    if (placeholder->maxContentionCounter > 0) {
+    out->contentionFactor = 0; // k
+    if (placeholder->maxContentionFactor > 0) {
         /* Choose a random contentionFactor in the inclusive range [0,
-         * placeholder->maxContentionCounter] */
-        if (!_mongocrypt_random_int64(
-                crypto, placeholder->maxContentionCounter + 1, &out->contentionFactor, status)) {
+         * placeholder->maxContentionFactor] */
+        if (!_mongocrypt_random_int64(crypto, placeholder->maxContentionFactor + 1, &out->contentionFactor, status)) {
             goto fail;
         }
     }
@@ -753,7 +756,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common(
                                              common,
                                              &placeholder->index_key_id,
                                              &value,
-                                             true, /* derive tokens using counter */
+                                             true, /* derive tokens using contentionFactor */
                                              out->contentionFactor,
                                              status)) {
         goto fail;
@@ -765,7 +768,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_common(
     _mongocrypt_buffer_steal(&out->escDerivedToken, &common->escDerivedToken);
     BSON_ASSERT(common->eccDerivedToken.data == NULL);
 
-    // p := EncryptCBC(ECOCToken, ESCDerivedFromDataTokenAndCounter)
+    // p := EncryptCBC(ECOCToken, ESCDerivedFromDataTokenAndContentionFactor)
     if (!_fle2_derive_encrypted_token(crypto,
                                       &out->encryptedTokens,
                                       common->collectionsLevel1Token,
@@ -1021,7 +1024,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_ciphertextForRange_v1(
                                                      &edge_tokens,
                                                      &placeholder->index_key_id,
                                                      &edge_buf,
-                                                     true, /* derive tokens using counter */
+                                                     true, /* derive tokens using contentionFactor */
                                                      contentionFactor,
                                                      status)) {
                 goto fail_loop;
@@ -1034,8 +1037,8 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_ciphertextForRange_v1(
             // c := ECCDerivedToken
             _mongocrypt_buffer_steal(&etc.eccDerivedToken, &edge_tokens.eccDerivedToken);
 
-            // p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndCounter ||
-            // ECCDerivedFromDataTokenAndCounter)
+            // p := EncryptCTR(ECOCToken, ESCDerivedFromDataTokenAndContentionFactor ||
+            // ECCDerivedFromDataTokenAndContentionFactor)
             if (!_fle2_derive_encrypted_token(kb->crypt->crypto,
                                               &etc.encryptedTokens,
                                               edge_tokens.collectionsLevel1Token,
@@ -1153,7 +1156,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_ciphertextForRange(
                                                      &edge_tokens,
                                                      &placeholder->index_key_id,
                                                      &edge_buf,
-                                                     true, /* derive tokens using counter */
+                                                     true, /* derive tokens using contentionFactor */
                                                      payload.contentionFactor,
                                                      status)) {
                 goto fail_loop;
@@ -1169,7 +1172,7 @@ static bool _mongocrypt_fle2_placeholder_to_insert_update_ciphertextForRange(
             _mongocrypt_buffer_steal(&etc.serverDerivedFromDataToken,
                                      &edge_tokens.serverDerivedFromDataToken);
 
-            // p := EncryptCBC(ECOCToken, ESCDerivedFromDataTokenAndCounter)
+            // p := EncryptCBC(ECOCToken, ESCDerivedFromDataTokenAndContentionFactor)
             if (!_fle2_derive_encrypted_token(kb->crypt->crypto,
                                               &etc.encryptedTokens,
                                               edge_tokens.collectionsLevel1Token,
@@ -1214,7 +1217,7 @@ fail:
 /**
  * Payload subtype 5: FLE2FindEqualityPayload
  *
- * {d: EDC, s: ESC, c: ECC, e: serverToken, cm: contentionCounter}
+ * {d: EDC, s: ESC, c: ECC, e: serverToken, cm: maxContentionFactor}
  */
 static bool _mongocrypt_fle2_placeholder_to_find_ciphertext_v1(_mongocrypt_key_broker_t* kb,
                                                                _mongocrypt_marking_t* marking,
@@ -1242,8 +1245,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertext_v1(_mongocrypt_key_b
                                              &common,
                                              &placeholder->index_key_id,
                                              &value,
-                                             false, /* derive tokens without counter */
-                                             placeholder->maxContentionCounter,
+                                             false, /* derive tokens without contentionFactor */
+                                             placeholder->maxContentionFactor, /* ignored */
                                              status)) {
         goto fail;
     }
@@ -1260,7 +1263,7 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertext_v1(_mongocrypt_key_b
         mc_ServerDataEncryptionLevel1Token_get(common.serverDataEncryptionLevel1Token),
         &payload.serverEncryptionToken);
 
-    payload.maxContentionCounter = placeholder->maxContentionCounter;
+    payload.maxContentionFactor = placeholder->maxContentionFactor;
 
     {
         bson_t out;
@@ -1285,7 +1288,7 @@ fail:
  * Payload subtype 12: FLE2FindEqualityPayloadV2
  * Delegates to ..._find_ciphertext_v1 when crypt->opts.use_fle2_v2 == false.
  *
- * {d: EDC, s: ESC, l: serverDerivedFromDataToken, cm: contentionCounter}
+ * {d: EDC, s: ESC, l: serverDerivedFromDataToken, cm: maxContentionFactor}
  */
 static bool _mongocrypt_fle2_placeholder_to_find_ciphertext(_mongocrypt_key_broker_t* kb,
                                                             _mongocrypt_marking_t* marking,
@@ -1317,8 +1320,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertext(_mongocrypt_key_brok
                                              &common,
                                              &placeholder->index_key_id,
                                              &value,
-                                             false, /* derive tokens without counter */
-                                             placeholder->maxContentionCounter,
+                                             false, /* derive tokens without contentionFactor */
+                                             placeholder->maxContentionFactor, /* ignored */
                                              status)) {
         goto fail;
     }
@@ -1332,8 +1335,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertext(_mongocrypt_key_brok
     _mongocrypt_buffer_steal(&payload.serverDerivedFromDataToken,
                              &common.serverDerivedFromDataToken);
 
-    // cm := maxContentionCounter
-    payload.maxContentionCounter = placeholder->maxContentionCounter;
+    // cm := maxContentionFactor
+    payload.maxContentionFactor = placeholder->maxContentionFactor;
 
     {
         bson_t out;
@@ -1540,7 +1543,7 @@ mc_mincover_t* mc_get_mincover_from_FLE2RangeFindSpec(mc_FLE2RangeFindSpec_t* fi
 /**
  * Payload subtype 10: FLE2FindRangePayload
  *
- * {e: serverToken, cm: contentionCounter,
+ * {e: serverToken, cm: maxContentionFactor,
  *  g: [{d: EDC, s: ESC, c: ECC}, ...]}
  */
 static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange_v1(
@@ -1575,8 +1578,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange_v1(
     }
 
     if (findSpec.edgesInfo.set) {
-        // cm := Queryable Encryption max counter
-        payload.payload.value.maxContentionCounter = placeholder->maxContentionCounter;
+        // cm := Queryable Encryption max contentionFactor
+        payload.payload.value.maxContentionFactor = placeholder->maxContentionFactor;
 
         // e := ServerDataEncryptionLevel1Token
         {
@@ -1621,8 +1624,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange_v1(
                                                          &edge_tokens,
                                                          &placeholder->index_key_id,
                                                          &edge_buf,
-                                                         false, /* derive tokens using counter */
-                                                         placeholder->maxContentionCounter,
+                                                         false, /* derive tokens using contentionFactor */
+                                                         placeholder->maxContentionFactor, /* ignored */
                                                          status)) {
                     goto fail_loop;
                 }
@@ -1678,7 +1681,7 @@ fail:
  * Delegates to ..._find_ciphertextForRange_v1
  *   when crypt->opts.use_fle2_v2 is false
  *
- * {cm: contentionCounter,
+ * {cm: maxContentionFactor,
  *  g: [{d: EDC, s: ESC, l: serverDerivedFromDataToken}, ...]}
  */
 static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange(
@@ -1715,8 +1718,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange(
     }
 
     if (findSpec.edgesInfo.set) {
-        // cm := Queryable Encryption max counter
-        payload.payload.value.maxContentionCounter = placeholder->maxContentionCounter;
+        // cm := Queryable Encryption max contentionFactor
+        payload.payload.value.maxContentionFactor = placeholder->maxContentionFactor;
 
         // g:= array<EdgeFindTokenSet>
         {
@@ -1745,8 +1748,8 @@ static bool _mongocrypt_fle2_placeholder_to_find_ciphertextForRange(
                                                          &edge_tokens,
                                                          &placeholder->index_key_id,
                                                          &edge_buf,
-                                                         false, /* derive tokens using counter */
-                                                         placeholder->maxContentionCounter,
+                                                         false, /* derive tokens without using contentionFactor */
+                                                         placeholder->maxContentionFactor, /* ignored */
                                                          status)) {
                     goto fail_loop;
                 }
